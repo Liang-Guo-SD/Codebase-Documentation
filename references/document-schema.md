@@ -14,6 +14,8 @@ Purpose, users, business outcomes, principal workflows, deployment shape, and th
 
 For each actor and capability: goal, prerequisites, exact steps, visible result, alternate/empty/error states, permissions, and troubleshooting. Include navigation labels and localized UI terms where relevant.
 
+**This section is produced by Phase 3.5 (Reconstruct User-Facing Procedures).** Every user-visible route discovered in Phase 2 must have a corresponding numbered procedure here. Each procedure follows the four-element template (preconditions → steps → expected result → error paths) defined in Phase 3.5. Do not defer procedure generation to the drafting phase — the procedures must exist before Phase 7 begins.
+
 ## 4. Capability map
 
 Provide the MECE inventory and actor-to-capability matrix. Every capability must have an implementation reference and evidence status.

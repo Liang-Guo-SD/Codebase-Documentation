@@ -5,7 +5,7 @@ license: MIT
 compatibility: Claude Code and Claude.ai. Codegraph integration requires Node 22 or 24 and `npm install -g @colbymchenry/codegraph` (optional; only beneficial for repos over ~150 files). Humanizer-zh integration requires Python 3 and `op7418/Humanizer-zh` (optional; only needed for Chinese-language output).
 metadata:
   author: Liang Guo
-  version: 2.0.0
+  version: 2.1.0
   category: documentation
 ---
 
@@ -116,15 +116,61 @@ For each capability, capture actors, preconditions, happy path, alternate paths,
 
 **With Codegraph:** Use `codegraph query <term>` to locate every symbol associated with each capability area. Cross-check routes, models, and jobs against the symbol graph to find orphaned code with no documented capability.
 
-### Phase 3: Trace the System from Interface to Effect
+### Phase 3: Trace the System from Interface to Effect (Code View)
 
-For each important workflow, follow the actual path:
+For each important workflow, trace the implementation path end to end:
 
-`user/trigger → route or entry point → validation/auth → domain/service logic → persistence → side effect → response/UI`
+`route or entry point → validation/auth → domain/service logic → persistence → side effect → response/UI`
 
-Name relevant files and symbols. Explain invariants, state transitions, idempotency, transaction boundaries, retries, and failure recovery. Include short, targeted code excerpts only when they clarify a security boundary, business rule, data transformation, or integration contract; never dump whole files or secrets.
+Name relevant files, symbols, and the exact line range for each hop. For each hop, capture:
+
+- **Auth/validation gate**: which decorator or check runs, what happens when it fails (404/403/redirect/message)
+- **Domain logic**: state transitions, invariants, idempotency, transaction boundaries
+- **Persistence**: what is written, when `commit()` is called, whether `rollback()` exists on failure
+- **Side effects**: emails, audit logs, scheduled tasks, external calls
+- **Response**: redirect, template render, flash message, HTTP status code
+
+Include short, targeted code excerpts that show the security boundary, business rule, data transformation, or integration contract. Never dump whole files or secrets. The output of this phase is a **code-path inventory** — a structured record of exactly what happens when each route is invoked. This inventory feeds Phase 3.5.
 
 **With Codegraph:** Use `codegraph_explore <route-or-handler>` to receive the call path across files in a single MCP call. Use `codegraph callers <symbol>` to verify all callers of a shared service. Use `codegraph node <symbol>` for callees at each hop.
+
+### Phase 3.5: Reconstruct User-Facing Procedures
+
+The code-path inventory from Phase 3 is implementation-facing. This phase reverses the lens and produces user-facing procedures — what a person does, sees, and recovers from. **Do not skip any route or operation discovered in Phase 2.** For every route that serves a user action, produce:
+
+#### For each operation, four mandatory elements
+
+**1. Preconditions** — what the user must have done or satisfied before starting:
+- Login state (which role, must be `active`?)
+- Data prerequisites (must be enrolled in the course? must be the chapter owner?)
+- System state prerequisites (course must be `published`? chapter must not be `superseded`?)
+- Derive these from the auth gate, validation checks, and early `abort()` / `redirect()` calls in the code path
+
+**2. Step-by-step operations** — numbered actions the user performs:
+- Use concrete UI labels in the product's language (e.g., "点击蓝色的'提交'按钮" not "click submit")
+- If the code reads from `request.form` or `request.files`, each field is a separate step
+- If the code has conditionals that change the user experience (e.g., `mode == "self-study"` vs `"assessment"`), branch the steps
+- Derive these from route methods (GET vs POST), form fields, and template names
+
+**3. Expected visible result** — what the user sees on the happy path:
+- Which page/template renders next (`redirect(url_for(...))` or `render_template(...)`)
+- What `flash("...", "success")` message appears
+- What data is visible (scores, answers, status changes)
+- Derive these from the success-branch `return` statements and `flash()` calls
+
+**4. At least one alternate or error path** — what happens when something goes wrong:
+- Use the **exact error string** from the code (e.g., `"Invalid credentials or inactive account."`, not "login fails")
+- State the HTTP status code if the route returns one
+- If the route has multiple failure branches (400, 403, 404, 409), cover each distinct error the user can encounter
+- Derive these from every `flash(..., "error")`, `abort()`, and non-2xx `return` in the code path
+
+#### Procedure generation rule
+
+Procedures must be grounded in what the user sees and does — not in what the code calls. Use code excerpts only to verify auth checks, data mutations, and the exact error strings. The procedure itself should be understandable by someone who has never read the source code.
+
+#### Cross-check
+
+After generating procedures for all routes, reconcile against the Phase 2 MECE inventory. Every user-visible capability must have a procedure. Log any capability that lacks a procedure in `DOCUMENTATION_LOG.md` with the reason.
 
 ### Phase 4: Analyze Data, Trust, and Risk
 
@@ -188,8 +234,11 @@ Humanization does not reopen evidence or claim-status gates. If a humanized pass
 
 Before declaring completion, verify:
 
-- Can a new user complete every supported workflow from the document?
+- Can a new user complete every supported workflow from the document **using only the numbered procedures from Phase 3.5**?
+- Does every user-facing route have a procedure with all four elements (preconditions, steps, expected result, error path)?
+- Do error paths use the exact error strings from the source code (not paraphrased versions)?
 - Can an auditor trace each material claim to code and executable evidence?
+- Are permissions, negative paths, data mutations, and external side effects covered?
 - Are permissions, negative paths, data mutations, and external side effects covered?
 - Are configuration, deployment, backup/restore, monitoring, and incident procedures covered?
 - Are limitations and unverified gates conspicuous?

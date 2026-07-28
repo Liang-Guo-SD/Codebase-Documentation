@@ -66,7 +66,7 @@ codegraph_context("enrollment assignment submission grading")
 
 Cross-check the returned symbol list against the route table and model list. Symbols with no documentation candidate are orphaned code — record them in the open-gaps register.
 
-### Phase 3 — Trace the system from interface to effect
+### Phase 3 — Trace the system from interface to effect (Code View)
 
 For each important workflow, start at the route or entry point and trace downward:
 
@@ -87,6 +87,20 @@ codegraph callers <function-name>
 ```
 
 This ensures you document every context in which a critical function is invoked.
+
+### Phase 3.5 — Reconstruct user-facing procedures
+
+Codegraph output from Phase 3 gives you the code path. Phase 3.5 reverses the lens to produce what the user does. For each route found in Phase 3:
+
+1. **Map form fields to procedure steps.** Every `request.form.get(...)` and `request.files.get(...)` in the POST handler is a user action. List them as numbered steps using the field's label from the template, not the form key name.
+
+2. **Extract exact error messages.** Search the code path for `flash(..., "error")` and non-2xx `return`/`abort()` calls. Record the exact string. Codegraph `codegraph_explore` already returns these inline — do not paraphrase them.
+
+3. **Identify the happy-path endpoint.** Find the success-branch `redirect(url_for(...))` or `render_template(...)`. This tells you which page the user lands on after a successful operation.
+
+4. **Identify preconditions from auth gates.** Every `@require_role(...)`, `abort(403)`, `abort(404)`, and early `if not` guard in the code path is a precondition. Translate it to user language (e.g., "You must be enrolled in this course" rather than "`_ensure_enrolled` must return True").
+
+**No Codegraph query specifically maps to procedure generation.** The input comes from the code paths already captured in Phase 3. Use `codegraph_explore` a second time on the same route if the first capture was truncated and you need the error paths.
 
 ### Phase 4 — Analyze data, trust, and risk
 
