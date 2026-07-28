@@ -239,7 +239,6 @@ Before declaring completion, verify:
 - Do error paths use the exact error strings from the source code (not paraphrased versions)?
 - Can an auditor trace each material claim to code and executable evidence?
 - Are permissions, negative paths, data mutations, and external side effects covered?
-- Are permissions, negative paths, data mutations, and external side effects covered?
 - Are configuration, deployment, backup/restore, monitoring, and incident procedures covered?
 - Are limitations and unverified gates conspicuous?
 - Does the MECE inventory reconcile against routes, models, jobs, commands, templates, and tests?
