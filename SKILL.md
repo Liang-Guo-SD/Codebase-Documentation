@@ -1,35 +1,72 @@
 ---
 name: codebase-documentation
-description: Generate detailed, evidence-backed English documentation from a project's source code, tests, configuration, and runtime behavior for end users, maintainers, and auditors.
+description: Produces detailed, evidence-backed documentation for an existing software project — user guide, system architecture, workflows, data model, security controls, and operations. Use when a user says "document this project", "write system docs", "create technical documentation", "document this codebase", "produce a user guide", "write developer docs", "audit this system", or "create a system document". Supports English and Chinese output. Optionally integrates Codegraph (MCP symbol-graph) for large repos and op7418/Humanizer-zh for Chinese post-processing.
+license: MIT
+compatibility: Claude Code and Claude.ai. Codegraph integration requires Node 22 or 24 and `npm install -g @colbymchenry/codegraph` (optional; only beneficial for repos over ~150 files). Humanizer-zh integration requires Python 3 and `op7418/Humanizer-zh` (optional; only needed for Chinese-language output).
+metadata:
+  author: Liang Guo
+  version: 2.0.0
+  category: documentation
 ---
 
 # Codebase Documentation
 
-Use this skill when a project needs a trustworthy documentation package that explains what users can do and how the system actually works. It is for existing codebases, not speculative product briefs. The output must be in English even when the product UI or source comments use another language. It is composable with artifact-specific skills: use those when the requested deliverable is DOCX, PDF, spreadsheet, or presentation.
+Produce trustworthy documentation grounded in the actual code, tests, and configuration of an existing project. The output serves three audiences simultaneously: users who need to operate the system, auditors who need to trace behavior to evidence, and maintainers who need to understand architecture, invariants, and operations.
 
-## Concrete use cases and success criteria
+## First Principles
 
-This skill supports three related use cases:
+1. **Code is the behavioral authority.** Treat PRDs, READMEs, and comments as declared intent. When they conflict with executable behavior, document the code's actual behavior and name the discrepancy.
+2. **Discovery is the most expensive part of documentation.** Use Codegraph's pre-indexed symbol graph when available to answer "what calls what" in two MCP calls instead of forty grep operations. Fall back to grep/glob/Read only when Codegraph is absent or the repo is small.
+3. **Audience language is a first-class decision.** Default to English. If the product is Chinese-first — Chinese UI, Chinese users, Chinese operations team — produce Chinese documentation and apply a humanize pass to eliminate AI-writing artifacts.
+4. **Humanization removes AI tells without sacrificing precision.** For Chinese output, a second pass with op7418/Humanizer-zh or the Claude-native ZH checklist eliminates translationese. Never soften claim status, weaken hedges, or remove necessary caveats during humanization.
+5. **Session continuity requires harness files.** Documentation of any serious codebase crosses context boundaries. The harness files — not conversation memory — are the authoritative state.
 
-1. **User enablement:** a new user can complete supported workflows, understand prerequisites, and recover from common failures without reading source code.
-2. **Audit and assurance:** an auditor can trace material behavior, controls, data mutations, and operational claims to source and reproducible evidence.
-3. **Engineering continuity:** a maintainer can locate ownership, invariants, integration boundaries, tests, configuration, and known gaps from a cold session.
+## Detect Phase and Resume
 
-Success requires all three audiences to be served by one consistent source of truth. Assess the result against these observable criteria: every material capability is mapped exactly once; every high-risk claim has implementation and verification references; every unverified external dependency is named with a closure procedure; runnable checks are recorded with exact results; and a new session can resume from the harness files without relying on conversation memory.
+At the start of every invocation, check for `DOCUMENTATION_PROGRESS.md` in the project's docs directory. If present, read it first and continue only from its recorded phase and next unit. If absent, create the harness files (see [harness-files.md](references/harness-files.md)) and enter `SETUP`.
 
-## Governing principles
+Never redo completed units because the conversation was compacted.
+
+## Harness Files
+
+Create and maintain these files under the project's `docs/` directory:
+
+- `DOCUMENTATION_PLAN.md` — audience, scope, output language, evidence standard, terminology decisions, and acceptance criteria.
+- `DOCUMENTATION_PROGRESS.md` — current phase, next unit, source revision, capabilities complete, blockers.
+- `GLOSSARY.md` — domain terms, UI labels, state names, code identifiers, and locked synonyms.
+- `DOCUMENTATION_LOG.md` — append-only record of every action, command, result, and open gap.
+
+Read [harness-files.md](references/harness-files.md) for templates. Do not pre-populate empty logs.
+
+## Tool Availability Check
+
+At the start of a new documentation effort, run these checks once and record results in `DOCUMENTATION_LOG.md`:
+
+```bash
+# Codegraph — optional, recommended for repos over ~150 files
+codegraph status 2>/dev/null || echo "codegraph: absent"
+
+# Humanizer-zh — optional, for Chinese documentation output
+python3 -c "import sys; sys.path.insert(0, 'Humanizer-zh'); import humanizer" 2>/dev/null \
+  && echo "humanizer-zh: available" || echo "humanizer-zh: absent"
+```
+
+If Codegraph is **available** and the repo has more than ~150 files: use it in Phases 1–4 as described in [codegraph-guide.md](references/codegraph-guide.md). If `codegraph status` shows zero symbols, run `codegraph init` first.
+
+If Humanizer-zh is **available** and the output language is Chinese: invoke it in Phase 7.5. If **absent**, apply Claude-native ZH humanization using [humanize-zh-pass.md](references/humanize-zh-pass.md).
+
+## Governing Principles
 
 The document is a claim-to-evidence map, not a prose rewrite of the repository.
 
-1. **Code is the behavioral authority.** Treat PRDs, README files, and comments as intent; resolve conflicts against executable behavior and tests.
-2. **Separate audiences without duplicating facts.** Explain the same capability first as a user outcome, then as an auditable implementation contract.
-3. **Make scope explicit.** Distinguish implemented, partially implemented, configured-but-unverified, deprecated, and planned behavior.
-4. **Never promote inference to fact.** Mark assumptions, unknowns, environment-dependent behavior, and evidence gaps.
-5. **Reproducibility is part of documentation.** Every material claim needs a source path, symbol/route/config key, test, command, or observed runtime result.
+1. **Separate audiences without duplicating facts.** Explain the same capability first as a user outcome, then as an auditable implementation contract.
+2. **Make scope explicit.** Distinguish implemented, partially implemented, configured-but-unverified, deprecated, and planned behavior.
+3. **Never promote inference to fact.** Mark assumptions, unknowns, environment-dependent behavior, and evidence gaps.
+4. **Reproducibility is part of documentation.** Every material claim needs a source path, symbol/route/config key, test, command, or observed runtime result.
 
-Read [document-schema.md](references/document-schema.md) before drafting. Read [evidence-and-analysis.md](references/evidence-and-analysis.md) when deciding what counts as evidence, how to analyze risk, or how to handle gaps. Use [harness-files.md](references/harness-files.md) when the documentation effort spans multiple sessions or large repositories.
+Read [evidence-and-analysis.md](references/evidence-and-analysis.md) when deciding what counts as evidence, how to analyze risk, or how to handle gaps.
 
-## Authority order
+## Authority Order
 
 Resolve conflicts in this order:
 
@@ -45,11 +82,7 @@ When a lower-ranked source conflicts with a higher-ranked source, document the c
 
 ## Workflow
 
-### 0. Detect phase and resume safely
-
-At the start of every invocation, look for `DOCUMENTATION_PROGRESS.md`. If present, read it before inspecting or editing outputs. Continue only from its recorded phase and next unit of work. If absent, create the harness files described in [harness-files.md](references/harness-files.md) and enter `SETUP`. Never redo completed units merely because the conversation was compacted.
-
-### 1. Establish the evidence boundary
+### Phase 1: Establish the Evidence Boundary
 
 Inspect the repository before writing. Identify:
 
@@ -59,11 +92,15 @@ Inspect the repository before writing. Identify:
 - unit, integration, end-to-end, security, migration, and operational tests;
 - CI scripts and available local commands.
 
-Record the commit/version, date, inspected paths, commands run, and environment limitations in the log. Do not hide untracked or generated files that materially affect behavior.
+**With Codegraph:** Run `codegraph_context` with a broad query such as "entry points routes services models" to obtain the primary symbol graph. Use `codegraph explore <module>` for each major subsystem. This replaces most grep/glob/find calls. See [codegraph-guide.md](references/codegraph-guide.md) for the exact call sequence.
 
-### 2. Build a MECE capability inventory
+**Without Codegraph:** Use grep, glob, and Read to build the same inventory manually.
 
-Classify every user-visible or operational capability exactly once in a primary capability area. Use this partition unless the product clearly requires a better one:
+Record the commit/version, date, inspected paths, commands run, and environment limitations in `DOCUMENTATION_LOG.md`. Do not hide untracked or generated files that materially affect behavior.
+
+### Phase 2: Build a MECE Capability Inventory
+
+Classify every user-visible or operational capability exactly once in a primary area. Use this partition unless the product clearly requires a better one:
 
 1. identity, authentication, authorization, and account lifecycle;
 2. primary domain workflows and state transitions;
@@ -77,7 +114,9 @@ Classify every user-visible or operational capability exactly once in a primary 
 
 For each capability, capture actors, preconditions, happy path, alternate paths, validation, failure behavior, authorization boundary, persistence effects, external effects, and evidence. Check that no feature is missing, duplicated across areas, or left as an unexplained orphan.
 
-### 3. Trace the system from interface to effect
+**With Codegraph:** Use `codegraph query <term>` to locate every symbol associated with each capability area. Cross-check routes, models, and jobs against the symbol graph to find orphaned code with no documented capability.
+
+### Phase 3: Trace the System from Interface to Effect
 
 For each important workflow, follow the actual path:
 
@@ -85,45 +124,86 @@ For each important workflow, follow the actual path:
 
 Name relevant files and symbols. Explain invariants, state transitions, idempotency, transaction boundaries, retries, and failure recovery. Include short, targeted code excerpts only when they clarify a security boundary, business rule, data transformation, or integration contract; never dump whole files or secrets.
 
-### 4. Analyze data, trust, and risk
+**With Codegraph:** Use `codegraph_explore <route-or-handler>` to receive the call path across files in a single MCP call. Use `codegraph callers <symbol>` to verify all callers of a shared service. Use `codegraph node <symbol>` for callees at each hop.
+
+### Phase 4: Analyze Data, Trust, and Risk
 
 Document the domain model and lifecycle of important records: fields, relationships, constraints, ownership, retention/deletion behavior, and sensitive data. For every trust boundary, explain input validation, authorization, output encoding, secret handling, file handling, rate limiting, auditability, and known residual risk. Identify high-risk logic and point to tests that exercise it.
 
-### 5. Verify claims
+**With Codegraph:** Use `codegraph impact <symbol>` to map the blast radius of every high-risk data model, auth function, or permission check. This reveals which routes and services are affected by a single model change — a direct measure of risk scope.
 
-Run the repository's documented checks where possible. Prefer the narrowest command that proves each claim, then run the full relevant suite. Inspect failures rather than suppressing them. For claims that require external services, production data, credentials, a live database, or a browser, label them **not verified in this environment** and state the exact rehearsal needed.
+Read [evidence-and-analysis.md](references/evidence-and-analysis.md) for the risk-first review procedure.
 
-Maintain a coverage matrix with columns: claim, audience, implementation source, evidence command/test, result, status, and gap/owner. A claim without evidence is a documentation defect.
+### Phase 5: Verify Claims
 
-### 6. Lock terminology and documentation decisions
+Run the repository's documented checks where possible. Prefer the narrowest command that proves each claim, then run the full relevant suite. Inspect failures rather than suppressing them. For claims requiring external services, production data, credentials, or a browser, label them **not verified in this environment** and state the exact rehearsal needed.
 
-Before large-scale drafting, create or update `DOCUMENTATION_PLAN.md`. Lock the audience, scope, status vocabulary, citation style, code-excerpt policy, localization policy, privacy redaction rules, and output format. Maintain `GLOSSARY.md` for domain terms, UI labels, state names, and code identifiers whose wording must remain consistent. Do not introduce competing synonyms for a locked term without recording a decision.
+**With Codegraph:** Use `codegraph affected <changed-files>` to identify which test files are linked to each source file under review. This narrows verification scope and surfaces tests that grep cannot easily correlate.
 
-### 7. Draft the English document
+Maintain a coverage matrix: claim | audience | implementation source | evidence command/test | result | status | gap/owner. A claim without evidence is a documentation defect.
 
-Use the structure in [document-schema.md](references/document-schema.md). Write user-facing explanations in plain language, then provide an implementation and audit view. Preserve product terminology and include a glossary. If the UI is localized, document the UI language separately; do not translate code identifiers, routes, configuration keys, or exact error strings inaccurately.
+### Phase 6: Lock Terminology and Documentation Decisions
 
-Use stable links such as `path/to/file.py:123` or `Class.method`. Include version/date scope on the title page. Prefer tables for matrices and concise sequence diagrams for multi-step flows.
+Before large-scale drafting, create or update `DOCUMENTATION_PLAN.md`. Lock:
 
-### 8. Perform bounded validation and independent completeness review
+- audience, scope, and **output language** (English or Chinese);
+- status vocabulary: Verified / Implemented-not-verified / Partially-verified / Contradicted / Planned;
+- citation style (`path/to/file.py:123` or `Class.method`);
+- code-excerpt policy (minimum size, redaction rules);
+- privacy redaction rules and output format.
 
-Before declaring completion, ask:
+Maintain `GLOSSARY.md` for domain terms, UI labels, state names, and code identifiers. Do not introduce competing synonyms for a locked term without recording a decision.
 
-- Can a new user complete every supported task from the document?
+### Phase 7: Draft the Document
+
+Use the structure in [document-schema.md](references/document-schema.md). Write user-facing explanations in the declared output language, then provide an implementation and audit view. Preserve product terminology.
+
+**English output:** Write in clear technical English. If the UI or source uses another language, include a glossary section and preserve exact UI labels in their original language for accuracy.
+
+**Chinese output:** Draft fully in Chinese. Code identifiers, routes, configuration keys, exact error strings, and log messages remain in their original language. Apply the humanize pass immediately after each major section (Phase 7.5) rather than as a final batch step.
+
+Use stable links such as `path/to/file.py:123`. Include version/date scope on the title page. Prefer tables for matrices and concise sequence diagrams for multi-step flows.
+
+### Phase 7.5: Humanize (Chinese Output Only)
+
+Skip this phase entirely if the output language is English.
+
+**With Humanizer-zh:**
+```bash
+# If not already installed
+git clone https://github.com/op7418/Humanizer-zh
+cd Humanizer-zh && pip install -r requirements.txt
+
+# Process each major section
+python3 humanizer.py --input <section-file.md> --output <section-humanized.md>
+```
+
+After tool processing: diff the original and humanized output. Restore any passage where the tool weakened a claim status, removed a stated limitation, collapsed a Partially-verified label, or altered a code identifier. Log the tool name, version, and sections processed.
+
+**Without Humanizer-zh:** Apply the Claude-native ZH humanization checklist in [humanize-zh-pass.md](references/humanize-zh-pass.md). This eliminates the eight most common patterns that make AI-generated Chinese technical documentation identifiable as machine-written.
+
+Humanization does not reopen evidence or claim-status gates. If a humanized passage collapses a "Partially-verified" label into a bare assertion, restore the precise status and log the conflict.
+
+### Phase 8: Validate
+
+Before declaring completion, verify:
+
+- Can a new user complete every supported workflow from the document?
 - Can an auditor trace each material claim to code and executable evidence?
 - Are permissions, negative paths, data mutations, and external side effects covered?
 - Are configuration, deployment, backup/restore, monitoring, and incident procedures covered?
 - Are limitations and unverified gates conspicuous?
 - Does the MECE inventory reconcile against routes, models, jobs, commands, templates, and tests?
 - Are all examples safe, current, and free of real credentials or personal data?
+- If Chinese output: is the humanize pass complete for every section?
 
-After each major capability area, validate links, code references, terminology, table consistency, and evidence status before proceeding. At the end, perform the checklist below and append the result to `DOCUMENTATION_LOG.md`.
+After each major capability area, validate links, code references, terminology, table consistency, and evidence status before proceeding. Append the checklist result to `DOCUMENTATION_LOG.md`.
 
 If any answer is no, either close the gap with more inspection/evidence or list it explicitly in the open-gaps register. Never call the document complete while hidden gaps remain.
 
-## Output contract
+## Output Contract
 
-Produce, in English:
+Produce, in the declared output language:
 
 - one primary document (normally `docs/system-documentation.md` or the requested format);
 - a claim/evidence coverage matrix;
@@ -134,10 +214,17 @@ For multi-session work, also maintain the harness files in [harness-files.md](re
 
 Do not modify application code unless the user explicitly asks. Do not invent behavior to make documentation look complete. When a generated artifact is requested, render or validate it using the relevant artifact skill and report the verification result.
 
-## Completion gate
+## Completion Gate
 
-Only state that documentation is complete when the document exists, the MECE reconciliation is recorded, all high-risk workflows have evidence, all tests/checks that were runnable pass or are explained, and every remaining external dependency is explicitly marked with a concrete verification procedure.
+Only state that documentation is complete when:
 
-## Portability and safety
+1. the document exists and covers every MECE capability area;
+2. the MECE reconciliation is recorded in `DOCUMENTATION_LOG.md`;
+3. all high-risk workflows have positive and at least one boundary/negative evidence entry;
+4. all tests/checks that were runnable pass or are explained;
+5. every remaining external dependency is explicitly marked with a concrete verification procedure;
+6. if Chinese output: every section has a humanize log entry and no open claim-status regressions remain.
+
+## Portability and Safety
 
 Use repository-relative references where possible so the document remains useful after cloning. Do not depend on a particular shell, editor, model, or MCP server unless the project requires it. Avoid writing secrets, personal data, tokens, private URLs, or production identifiers into excerpts, fixtures, screenshots, logs, or examples. If sensitive evidence is necessary, describe its existence and location without copying the value.

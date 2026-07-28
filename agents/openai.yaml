@@ -1,7 +1,7 @@
 interface:
   display_name: "Codebase Documentation"
-  short_description: "Write evidence-backed project documentation"
-  default_prompt: "Use $codebase-documentation to analyze this project and produce detailed English documentation for users, maintainers, and auditors, grounded in code and verification evidence."
+  short_description: "Write evidence-backed project documentation in English or Chinese"
+  default_prompt: "Use $codebase-documentation to analyze this project and produce detailed documentation for users, maintainers, and auditors, grounded in code and verification evidence. If you need Chinese output, say so and the skill will draft in Chinese and apply the humanize pass automatically."
 
 policy:
   allow_implicit_invocation: true
